@@ -1,10 +1,7 @@
 package lipid;
 
-import java.util.Collections;
-import java.util.Objects;
-import java.util.Set;
-import java.util.TreeSet;
-
+import java.util.*;
+import adduct.*;
 /**
  * Class to represent the annotation over a lipid
  */
@@ -12,24 +9,23 @@ public class Annotation {
 
     private final Lipid lipid;
     private final double mz;
-    private final double intensity; // intensity of the most abundant peak in the groupedPeaks
+    private final double intensity;
     private final double rtMin;
-    private final IoniationMode ionizationMode;
-    private String adduct; // !!TODO The adduct will be detected based on the groupedSignals
+    private String adduct;
     private final Set<Peak> groupedSignals;
     private int score;
     private int totalScoresApplied;
-
+    private Ionization ionization;
+    private static final double PPMTOLERANCE = 10;
 
     /**
      * @param lipid
      * @param mz
      * @param intensity
      * @param retentionTime
-     * @param ionizationMode
      */
-    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, IoniationMode ionizationMode) {
-        this(lipid, mz, intensity, retentionTime, ionizationMode, Collections.emptySet());
+    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, Ionization ionization) {
+        this(lipid, mz, intensity, retentionTime, Collections.emptySet(),ionization);
     }
 
     /**
@@ -37,19 +33,19 @@ public class Annotation {
      * @param mz
      * @param intensity
      * @param retentionTime
-     * @param ionizationMode
      * @param groupedSignals
      */
-    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, IoniationMode ionizationMode, Set<Peak> groupedSignals) {
+    public Annotation(Lipid lipid, double mz, double intensity, double retentionTime, Set<Peak> groupedSignals,Ionization ionization) {
         this.lipid = lipid;
         this.mz = mz;
         this.rtMin = retentionTime;
         this.intensity = intensity;
-        this.ionizationMode = ionizationMode;
-        // !!TODO This set should be sorted according to help the program to deisotope the signals plus detect the adduct
+        this.ionization = ionization;
         this.groupedSignals = new TreeSet<>(groupedSignals);
         this.score = 0;
         this.totalScoresApplied = 0;
+        detectAdductFromPeaks();
+
     }
 
     public Lipid getLipid() {
@@ -76,14 +72,9 @@ public class Annotation {
         return intensity;
     }
 
-    public IoniationMode getIonizationMode() {
-        return ionizationMode;
-    }
-
     public Set<Peak> getGroupedSignals() {
         return Collections.unmodifiableSet(groupedSignals);
     }
-
 
     public int getScore() {
         return score;
@@ -93,16 +84,20 @@ public class Annotation {
         this.score = score;
     }
 
-    // !CHECK Take into account that the score should be normalized between -1 and 1
+    public Ionization getIonization() {
+        return ionization;
+    }
+
+    public void setIonization(Ionization ionization) {
+        this.ionization = ionization;
+    }
+
+
     public void addScore(int delta) {
         this.score += delta;
         this.totalScoresApplied++;
     }
 
-    /**
-     * @return The normalized score between 0 and 1 that consists on the final number divided into the times that the rule
-     * has been applied.
-     */
     public double getNormalizedScore() {
         return (double) this.score / this.totalScoresApplied;
     }
@@ -128,5 +123,91 @@ public class Annotation {
                 lipid.getName(), mz, rtMin, adduct, intensity, score);
     }
 
-    // !!TODO Detect the adduct with an algorithm or with drools, up to the user.
+   public void detectAdductFromPeaks() {
+
+        String finalAdduct = null;
+
+        if (ionization == Ionization.POSITIVE) {
+            for (String adduct1 : AdductList.MAPMZPOSITIVEADDUCTS.keySet()) {
+                for (String adduct2 : AdductList.MAPMZPOSITIVEADDUCTS.keySet()) {
+                    if (adduct1.equals(adduct2)) continue;
+
+                    for (Peak p1 : groupedSignals) {
+                        for (Peak p2 : groupedSignals) {
+                            if (p1.equals(p2)) continue;
+
+                            double mz1 = p1.getMz();
+                            double mz2 = p2.getMz();
+
+                            Double mass1 = Adduct.getMonoisotopicMassFromMZ(mz1, adduct1);
+                            Double mass2 = Adduct.getMonoisotopicMassFromMZ(mz2, adduct2);
+
+                            if (mass1 != null && mass2 != null) {
+                                int ppmDiffBetweenMasses = Adduct.calculatePPMIncrement(mass1, mass2);
+
+                                if (ppmDiffBetweenMasses <= PPMTOLERANCE) {
+                                    int ppmToMz1 = Adduct.calculatePPMIncrement(mz1, this.mz);
+                                    int ppmToMz2 = Adduct.calculatePPMIncrement(mz2, this.mz);
+
+                                    if (ppmToMz1 <= PPMTOLERANCE) {
+                                        finalAdduct = adduct1;
+                                        this.adduct = finalAdduct;
+                                        return;
+                                    } else if (ppmToMz2 <= PPMTOLERANCE) {
+                                        finalAdduct = adduct2;
+                                        this.adduct = finalAdduct;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } else if (ionization == Ionization.NEGATIVE) {
+            for (String adduct1 : AdductList.MAPMZNEGATIVEADDUCTS.keySet()) {
+                for (String adduct2 : AdductList.MAPMZNEGATIVEADDUCTS.keySet()) {
+                    if (adduct1.equals(adduct2)) continue;
+
+                    for (Peak p1 : groupedSignals) {
+                        for (Peak p2 : groupedSignals) {
+                            if (p1.equals(p2)) continue;
+
+                            double mz1 = p1.getMz();
+                            double mz2 = p2.getMz();
+
+                            Double mass1 = Adduct.getMonoisotopicMassFromMZ(mz1, adduct1);
+                            Double mass2 = Adduct.getMonoisotopicMassFromMZ(mz2, adduct2);
+
+                            if (mass1 != null && mass2 != null) {
+                                int ppmDiffBetweenMasses = Adduct.calculatePPMIncrement(mass1, mass2);
+
+                                if (ppmDiffBetweenMasses <= PPMTOLERANCE) {
+                                    int ppmToMz1 = Adduct.calculatePPMIncrement(mz1, this.mz);
+                                    int ppmToMz2 = Adduct.calculatePPMIncrement(mz2, this.mz);
+
+                                    if (ppmToMz1 <= PPMTOLERANCE) {
+                                        finalAdduct = adduct1;
+                                        this.adduct = finalAdduct;
+                                        return;
+                                    } else if (ppmToMz2 <= PPMTOLERANCE) {
+                                        finalAdduct = adduct2;
+                                        this.adduct = finalAdduct;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        this.adduct = finalAdduct;
+    }
+
+
 }
+
+
+
