@@ -3,25 +3,133 @@ package lipid;
 
 unit LipidScoreUnit;
 
-// TODO Include here rules and queries to fulfill the practice requirements
+// ===========================
+// POSITIVE EVIDENCE
+// ===========================
 
-
-// This is one example of rules that only prints the factorial combination of all pairs eliminating the A-A combination.
-// !! TODO This rule does not include the lipid type, you shall add it.
-// !! TODO Rule that states that the same lipid type with the same number of double bonds and a higher number of carbons should have a higher RT
-// !! TODO
-rule "Score 1 for lipid pair with increasing RT and carbon count"
+rule "1. RT increases with more carbon atoms (same type, same double bonds)"
 when
-    $a1 : /annotations [$rt1 : rtMin, $carbonCount1 : lipid.getCarbonCount(), $doubleBondCount : lipid.getDoubleBondsCount()]
-    $a2 : /annotations [this!= $a1, lipid.getDoubleBondsCount() == $doubleBondCount,
-    rtMin > $rt1, lipid.getCarbonCount() > $carbonCount1]
+    $a1 :/ annotations[
+        $rt1 : getRtMin(),
+        $carbonCount : getLipid().getCarbonCount(),
+        $doubleBoundCount : getLipid().getDoubleBondsCount(),
+        $type : getLipid().getLipidType()
+    ]
+    $a2 : /annotations[
+        this != $a1,
+        getLipid().getLipidType() == $type,
+        getLipid().getDoubleBondsCount() == $doubleBoundCount,
+        getLipid().getCarbonCount() > $carbonCount,
+        getRtMin() > $rt1
+    ]
 then
-    // in this case, the only change is the addition of the score, but the fact does not change so we do not break the principle of refractoriness
     $a1.addScore(1);
     $a2.addScore(1);
-    // !! TODO ONLY FOR DEBUGGING
-    System.out.println("Scored 1 for annotations: " + $a1 + " and " + $a2);
+end
+
+rule "2. RT increases with fewer double bonds (same type, same carbon count)"
+when
+    $a1 : /annotations[
+        $rt1 : getRtMin(),
+        $doubleBoundCount : getLipid().getDoubleBondsCount(),
+        $carbonCount : getLipid().getCarbonCount(),
+        $type : getLipid().getLipidType()
+    ]
+    $a2 :/ annotations[
+        this != $a1,
+        getLipid().getLipidType() == $type,
+        getLipid().getCarbonCount() == $carbonCount,
+        getLipid().getDoubleBondsCount() <  $doubleBoundCount,
+        getRtMin() > $rt1
+    ]
+then
+    $a1.addScore(1);
+    $a2.addScore(1);
+end
+
+rule "3. RT increases with higher lipid type priority (same double bonds and carbons)"
+when
+    $a1 : /annotations[
+        $rt1 : getRtMin(),
+        $doubleBoundCount : getLipid().getDoubleBondsCount(),
+        $carbonCount : getLipid().getCarbonCount(),
+        $type : getLipid().getLipidType()
+    ]
+    $a2 : /annotations[
+        this != $a1,
+        getLipid().getDoubleBondsCount() == $doubleBoundCount,
+        getLipid().getCarbonCount() ==$carbonCount ,
+        getLipid().getLipidType() != $type,
+        Lipid.getPriority(getLipid().getLipidType()) > Lipid.getPriority($type),
+        getRtMin() > $rt1
+    ]
+then
+    $a1.addScore(1);
+    $a2.addScore(1);
 end
 
 
-// !! TODO NEXT RULE: Negative evidence. If the RT follows the opposite order than the previous one, then the addScore should be -1.
+// ===========================
+// NEGATIVE EVIDENCE
+// ===========================
+
+rule "4. RT decreases with more carbon atoms "
+when
+    $a1 :/ annotations[
+        $rt1 : getRtMin(),
+        $carbonCount : getLipid().getCarbonCount(),
+        $doubleBoundCount : getLipid().getDoubleBondsCount(),
+        $type : getLipid().getLipidType()
+    ]
+    $a2 : /annotations[
+        this != $a1,
+        getLipid().getLipidType() == $type,
+        getLipid().getDoubleBondsCount() ==  $doubleBoundCount,
+        getLipid().getCarbonCount() > $carbonCount,
+        getRtMin() < $rt1
+    ]
+then
+    $a1.addScore(-1);
+    $a2.addScore(-1);
+end
+
+rule "5. RT decreases with fewer double bonds "
+when
+    $a1 : /annotations[
+        $rt1 : getRtMin(),
+        $doubleBoundCount : getLipid().getDoubleBondsCount(),
+        $carbonCount : getLipid().getCarbonCount(),
+        $type : getLipid().getLipidType()
+    ]
+    $a2 : /annotations[
+        this != $a1,
+        getLipid().getLipidType() == $type,
+        getLipid().getCarbonCount() == $carbonCount,
+        getLipid().getDoubleBondsCount() <  $doubleBoundCount,
+        getRtMin() < $rt1
+    ]
+then
+    $a1.addScore(-1);
+    $a2.addScore(-1);
+end
+
+rule "6. RT decreases with later eluting lipid type"
+when
+    $a1 : /annotations[
+        $rt1 : getRtMin(),
+        $doubleBoundCount : getLipid().getDoubleBondsCount(),
+        $carbonCount : getLipid().getCarbonCount(),
+        $type : getLipid().getLipidType()
+    ]
+    $a2 : /annotations[
+        this != $a1,
+        getLipid().getDoubleBondsCount() == $doubleBoundCount,
+        getLipid().getCarbonCount() == $carbonCount,
+        getLipid().getLipidType() != $type,
+        Lipid.getPriority(getLipid().getLipidType()) > Lipid.getPriority($type),
+        getRtMin() < $rt1
+    ]
+then
+    $a1.addScore(-1);
+    $a2.addScore(-1);
+end

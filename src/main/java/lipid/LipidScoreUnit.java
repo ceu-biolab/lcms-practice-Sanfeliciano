@@ -8,6 +8,7 @@ import java.util.HashSet;
 
 public class LipidScoreUnit implements RuleUnitData {
 
+
     private final DataStore<Annotation> annotations;
 
     public LipidScoreUnit() {
